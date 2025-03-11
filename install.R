@@ -1,3 +1,2 @@
-install.packages("caTools")
-install.packages("MASS")
-install.packages("ggord")
+install.packages("psych")
+install.packages("pracma")
