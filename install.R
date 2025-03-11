@@ -1,4 +1,3 @@
-install.packages("ggplot2")
-install.packages("caret")
-install.packages("rpart")
-install.packages("rpart.plot")
+install.packages("caTools")
+install.packages("MASS")
+install.packages("ggord")
