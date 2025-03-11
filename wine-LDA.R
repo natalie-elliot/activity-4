@@ -4,7 +4,7 @@ library(MASS)
 library(ggord)
 
 #load the dataset
-wine <- read.csv("https://github.com/natalie-elliot/activity-4/blob/main/Wine.csv")
+wine <- read.csv("Wine.csv")
 
 #view data structure
 str(wine)
