@@ -1,0 +1,192 @@
+---
+title: 'Decision Tree Classifiers for the mtcars Dataset'
+author: "Natalie Elliot"
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Prepare the R Environment
+
+```{r prep R, echo=TRUE}
+#load packages
+library("ggplot2")
+library("caret")
+library("rpart")
+library("rpart.plot")
+```
+
+## Step 1: Data Preparation
+
+```{r data prep, echo=TRUE}
+#load the data
+data("mtcars")
+
+#view first 6 rows
+head(mtcars)
+```
+
+```{r data structure, echo=TRUE}
+#data structure
+str(mtcars)
+```
+
+```{r data summary, echo=TRUE}
+#data summary
+summary(mtcars)
+```
+
+```{r histogram for mpg, echo=TRUE}
+#create histogram of values for mpg
+hist(mtcars$mpg,
+     col='steelblue',
+     main='Histogram',
+     xlab='mpg',
+     ylab='Frequency')
+```
+
+```{r convert mpg to binary target variable, echo=TRUE}
+#convert 'mpg' variable to binary target variable 'HighEfficiency' for mpg > the median labeled '1' and 'LowEfficiency' for mpg < the median labeled '0'
+mtcars[["mpg"]] <- factor(cut(mtcars[["mpg"]], c(1, 19.20, 34)),
+                            labels=c("LowEfficiency", "HighEfficiency"))
+
+mtcars$mpg <- factor(ifelse(mtcars$mpg == "HighEfficiency", 1, 0))
+
+#verify conversion
+str(mtcars)
+```
+
+```{r data distribution, echo=TRUE}
+#show distribution of mpg where 0=LowEfficiency (<= 19.20mpg) and 1=HighEfficiency (>= 19.20mpg)
+table(mtcars$mpg)
+```
+
+## Step 2: Data Visualization
+
+```{r data visualization, echo=TRUE}
+#bar plot of MPG by car model
+ggplot(mtcars, aes(x = rownames(mtcars), y = mpg)) +
+  geom_bar(stat = "identity", fill = "darkturquoise") +
+  labs(x = "Car Model", y = "MPG", title = "MPG by Car Model") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+
+```{r mpg vs hp plot, echo=TRUE}
+#plot of mpg vs hp using cyl for color and vs (engine cylinder configuration where straight line=0 and v-shape=1) for shape
+ggplot(data = mtcars, aes(x = hp, y = mpg, col = factor(cyl), shape = factor(vs))) +
+  geom_point() +
+  labs(title = "Miles per Gallon vs Horsepower", 
+       x = "Horsepower", y = "Miles per Gallon")
+```
+
+```{r mpg vs wt plot, echo=TRUE}
+#plot of mpg vs wt using carb (number of carburetors) for color and am (transmission type where automatic=0 and manual=1) for shape
+ggplot(data = mtcars, aes(x = wt, y = mpg, col = factor(carb), shape = factor(am))) +
+  geom_point() +
+  labs(title = "Miles per Gallon vs Weight", 
+       x = "Weight", y = "Miles per Gallon")
+```
+
+```{r bubble plot of mpg vs disp, echo=TRUE}
+#bubble plot of mpg vs disp using carb (number of carburetors) for color and gear (number of forward gears) for size
+ggplot(mtcars, aes(x = disp, y = mpg, size = gear, color = factor(carb))) +
+  geom_point(alpha = 0.7) +
+  scale_size_continuous(range = c(2, 10)) +
+  scale_fill_brewer(palette="Dark2") +
+  labs(x = "Displacement (in cubic in.)", y = "MPG", size = "Number of Gears", 
+       color = "Number of Carburetors", 
+       title = "MPG vs. Displacement (Bubble Size: Number of Gears)") +
+  theme_minimal()
+```
+
+```{r pairs plot, echo=TRUE}
+#generate pair plots to explore variable relationships
+pairs(mtcars, main = "mtcars data", col=mtcars$mpg)
+```
+
+## Step 3: Data Splitting
+
+```{r split the data, echo=TRUE}
+#Split the data into a training and testing sets at a ratio of 70:30 respectively
+
+#set seed for randomization and reproducibility
+set.seed(123)
+
+#split the data into training and test sets
+index <- createDataPartition(mtcars$mpg, p = 0.7, list = FALSE)
+trainData <- mtcars[index,]
+testData <- mtcars[-index,]
+```
+
+## Step 4: Model Training
+
+```{r train decision tree model, echo=TRUE}
+#train a decision tree model using the rpart package to predict the binary target 'HighEfficiency' (HighEfficiency = 1)
+
+mtcarsTree <- rpart(mpg ~ vs + am + gear + carb, 
+                    data = trainData, method = "class", 
+                    control = rpart.control(xval = 10, minsplit = 0, cp=0.001))
+
+#visualize the decision tree using the rpart.plot package
+
+rpart.plot(mtcarsTree)
+```
+
+## Step 5: Model Evaluation
+
+```{r evaluate the model, echo=TRUE}
+#make predictions on the testing set using the trained model
+predictions <- predict(mtcarsTree, newdata = testData, type = "class")
+
+#evaluate the model using a confusion matrix and 
+#calculate the accuracy, precision, recall, and F1- score
+confusionmatrix <- confusionMatrix(predictions, testData$mpg, 
+                                   positive = "1", mode = "everything")
+print(confusionmatrix)
+```
+
+## Step 6: Perform pruning on the decision tree to optimize its performance
+
+```{r cp table, echo=TRUE}
+#view complexity parameter table
+print(mtcarsTree$cptable)
+```
+
+A general rule of thumb for pruning is when rel_error + xstd \< xerror, that is the ideal place to prune the tree. At node 3, rel_error + xstd = 0.36164918 which is less than the xerror (0.4545455) so, we prune at node 3 with a cp of 0.035.
+
+```{r prune the tree, echo=TRUE}
+#prune the tree at node 3
+prunedTree <- prune(mtcarsTree, cp=0.035)
+
+#Evaluate the pruned model and compare results to the original model
+
+#visualize the pruned tree
+rpart.plot(prunedTree)
+```
+
+```{r make predictions and evaluate, echo=TRUE}
+#make predictions with the pruned tree and evaluate again
+prunedPredictions <- predict(prunedTree, newdata = testData, type = "class")
+prunedConfusionMatrix <- confusionMatrix(prunedPredictions, testData$mpg, 
+                                         positive = "1", mode = "everything")
+print(prunedConfusionMatrix)
+```
+
+The pruned model and the original model have the same accuracy, precision, recall, and F1 score. The biggest difference between the models is that the pruned model has fewer predictor variables than the original model.
+
+### Report:
+
+For this classification tree model, I wanted to examine how the variables cyl (number of cylinders), vs (engine cylinder configuration where straight line=0 and v-shape=1), carb (number of carburetors), am (transmission type where automatic=0 and manual=1), and gear (number of forward gears) impacted the mpg variable. Since last week’s regression models already showed that hp, wt, and dist all had a negative linear relationship to mpg (i.e., as wt, hp, and dist increase, mpg decrease).
+
+Scatterplots and a pairs plot were used to determine which of these variables were likely to create high efficiency mpg and low efficiency mpg. The plots showed that v-shaped cylinder configurations, cars with 4 cylinders, manual transmissions, more than 3 carburetors, and more than 3.5 gears were more likely to have high efficiency mpg. Whereas, straight line cylinder configurations, cars with 8 cylinders, automatic transmissions, more than 3 carburetors, and 3 gears were more likely to have low efficiency mpg.
+
+After splitting the data for training and testing, the variables vs, am, gear, and carb were selected for the classification tree model. Cross-validation of 10, a minimum split of 0, and a complexity parameter of 0.001 were selected as controls for the model. This resulted in a decision tree model with 6 splits where all 4 chosen variables were utilized.
+
+The model evaluation using the testing set showed an 89% accuracy rate, 80% precision rate, 100% recall rate, and an F1 score of 89%. This suggests that not only is the model very accurate at making predictions generally, but the positive prediction rate (set to measure HighEfficiency as the positive class), and true positive predictions rates, are likewise very accurate.
+
+The tree was then pruned at the third node after examining the complexity parameter table, which reduced the number of splits to 3. This was selected by looking at the relative error (rel_error), standard error (xstd), and cross validation error (xerror). A general rule of thumb for pruning is when rel_error + xstd \< xerror, that is the ideal place to prune the tree. At node 3, rel_error + xstd = 0.36164918 which is less than the xerror (0.4545455). The pruned tree model had its complexity parameter set to 0.035 to prune at the ideal place.
+
+By pruning the tree, it was very easy to interpret the plot. If a car has a manual transmission, it is 43% more likely to have high efficiency mpg, and if a car has an automatic transmission, v-shaped engine, and more than 3 carburetors it is 13% more likely to have high efficiency mpg. Making predictions with the test data had the same accuracy, precision, recall, and F1 score as the unpruned model.
